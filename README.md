@@ -28,6 +28,7 @@ metrics.
 ## 🗂️ Dataset
 
 - **File:** `HOUSE_PRICE_PREDICTION.csv`
+**Resource** https://www.kaggle.com/datasets/yasserh/housing-prices-dataset
 - **Records:** 545 houses
 - **Features used:**
 
@@ -136,13 +137,7 @@ performance metrics (MAE, RMSE, R²) displayed directly within the
 
 ## 👤 Author
 
-**[Your Name]**
-[Your Roll Number / Course / College Name]
-Submitted as part of [Course/Subject Name], [Semester/Year]
+Sourav Mahata— BCA student, Roll No :2507 ,College : Midnapore College (Autonomous), IBM SkillsBuild Data Analytics with AI Academic Internship (BharatCares x AICTE), 2026.
 
 ---
 
-## 📄 License
-
-This project is submitted for academic purposes as part of a college
-coursework assignment.
