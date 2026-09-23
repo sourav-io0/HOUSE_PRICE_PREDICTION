@@ -12,12 +12,14 @@ DATA_PATH = "HOUSE_PRICE_PREDICTION.csv"
 FEATURES = ["area", "bedrooms", "bathrooms", "parking"]
 TARGET = "price"
 
+NAVY = "#1F4E79"
+RED = "#B23A48"
+PALETTE = [NAVY, RED, "#4C8DAE", "#E8A33D"]
+
 
 # ==========================================
 # DATA LOADING & MODEL TRAINING (cached)
 # ==========================================
-# Cached so the CSV is read and the model trained once, instead of on
-# every widget interaction (Streamlit reruns the whole script each time).
 
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
@@ -55,18 +57,49 @@ def train_model(df: pd.DataFrame):
     return model, mae, rmse, r2, results, coefs, X_train.shape, X_test.shape
 
 
+def fmt_money(x: float) -> str:
+    """Compact currency formatting, e.g. 4.77M / 950K."""
+    if abs(x) >= 1_00_00_000:  # 1 crore+
+        return f"₹{x/1_00_00_000:.2f}Cr"
+    if abs(x) >= 1_000_000:
+        return f"₹{x/1_000_000:.2f}M"
+    if abs(x) >= 1_000:
+        return f"₹{x/1_000:.0f}K"
+    return f"₹{x:,.0f}"
+
+
 # ==========================================
-# PAGE CONFIGURATION
+# PAGE CONFIGURATION + LIGHT STYLING
 # ==========================================
 
 st.set_page_config(
-    page_title="House Price Prediction",
+    page_title="Housing Price Analysis Dashboard",
     page_icon="🏠",
     layout="wide",
 )
 
-st.title("🏠 House Price Prediction")
-st.write("Estimate a house's price and explore how the model arrived at it.")
+st.markdown(
+    """
+    <style>
+        .block-container { padding-top: 1.5rem; }
+        div[data-testid="stMetric"] {
+            background-color: #ffffff;
+            border: 1px solid #e6e6e6;
+            border-radius: 10px;
+            padding: 12px 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        div[data-testid="stMetricValue"] { color: #1F4E79; }
+        .dash-title {
+            background-color: #eaf1f8;
+            border-radius: 10px;
+            padding: 14px 20px;
+            border-left: 6px solid #1F4E79;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ==========================================
@@ -91,16 +124,169 @@ model, mae, rmse, r2, results, coefs, train_shape, test_shape = train_model(df)
 
 
 # ==========================================
+# HEADER
+# ==========================================
+
+st.markdown(
+    '<div class="dash-title"><h2 style="margin:0;color:#1F4E79;">'
+    '🏠 Real Estate — Housing Price Analysis Dashboard</h2></div>',
+    unsafe_allow_html=True,
+)
+st.write("")
+
+
+# ==========================================
+# SIDEBAR FILTERS (slicers)
+# ==========================================
+
+st.sidebar.header("🔎 Filters")
+
+if st.sidebar.button("Clear all filters"):
+    for key in ["f_bedrooms", "f_bathrooms", "f_parking", "f_area", "f_price"]:
+        st.session_state.pop(key, None)
+    st.rerun()
+
+bedroom_opts = sorted(df["bedrooms"].unique())
+bathroom_opts = sorted(df["bathrooms"].unique())
+parking_opts = sorted(df["parking"].unique())
+
+sel_bedrooms = st.sidebar.multiselect("Bedrooms", bedroom_opts, default=bedroom_opts, key="f_bedrooms")
+sel_bathrooms = st.sidebar.multiselect("Bathrooms", bathroom_opts, default=bathroom_opts, key="f_bathrooms")
+sel_parking = st.sidebar.multiselect("Parking spaces", parking_opts, default=parking_opts, key="f_parking")
+
+area_min, area_max = int(df["area"].min()), int(df["area"].max())
+sel_area = st.sidebar.slider("Area (sq ft)", area_min, area_max, (area_min, area_max), key="f_area")
+
+price_min, price_max = int(df["price"].min()), int(df["price"].max())
+sel_price = st.sidebar.slider(
+    "Price range (₹)", price_min, price_max, (price_min, price_max),
+    format="₹%d", key="f_price",
+)
+
+filtered = df[
+    df["bedrooms"].isin(sel_bedrooms)
+    & df["bathrooms"].isin(sel_bathrooms)
+    & df["parking"].isin(sel_parking)
+    & df["area"].between(*sel_area)
+    & df["price"].between(*sel_price)
+]
+
+if filtered.empty:
+    st.warning("No properties match the current filters. Try widening them from the sidebar.")
+    st.stop()
+
+
+# ==========================================
 # TABS
 # ==========================================
 
-tab_predict, tab_explore, tab_performance = st.tabs(
-    ["🔮 Predict", "📈 Explore Data", "🎯 Model Performance"]
+tab_dash, tab_predict, tab_performance = st.tabs(
+    ["📊 Dashboard", "🔮 Predict", "🎯 Model Performance"]
 )
 
 
 # ------------------------------------------
-# TAB 1: PREDICT
+# TAB 1: DASHBOARD (Power-BI style overview)
+# ------------------------------------------
+with tab_dash:
+    st.caption(f"Showing **{len(filtered)}** of {len(df)} properties based on current filters")
+
+    # ---- KPI cards ----
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Average Price", fmt_money(filtered["price"].mean()))
+    k2.metric("Avg Bathrooms", f"{filtered['bathrooms'].mean():.2f}")
+    k3.metric("Median Bedrooms", f"{filtered['bedrooms'].median():.0f}")
+    k4.metric("Average Parking", f"{filtered['parking'].mean():.2f}")
+    k5.metric("Average Area", f"{filtered['area'].mean():,.0f} sqft")
+
+    st.write("")
+
+    # ---- Row 1: bar charts by bedrooms / bathrooms / parking ----
+    r1c1, r1c2, r1c3 = st.columns(3)
+
+    with r1c1:
+        avg_by_bed = filtered.groupby("bedrooms", as_index=False)["price"].mean()
+        fig = px.bar(
+            avg_by_bed, x="bedrooms", y="price", text_auto=".2s",
+            title="Avg Price by Bedrooms", color_discrete_sequence=[NAVY],
+        )
+        fig.update_layout(height=300, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with r1c2:
+        avg_by_bath = filtered.groupby("bathrooms", as_index=False)["price"].mean()
+        fig = px.bar(
+            avg_by_bath, x="bathrooms", y="price", text_auto=".2s",
+            title="Avg Price by Bathrooms", color_discrete_sequence=[RED],
+        )
+        fig.update_layout(height=300, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with r1c3:
+        avg_by_park = filtered.groupby("parking", as_index=False)["price"].mean()
+        fig = px.bar(
+            avg_by_park, x="parking", y="price", text_auto=".2s",
+            title="Avg Price by Parking", color_discrete_sequence=["#4C8DAE"],
+        )
+        fig.update_layout(height=300, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ---- Row 2: scatter, distribution, donut ----
+    r2c1, r2c2, r2c3 = st.columns(3)
+
+    with r2c1:
+        fig = px.scatter(
+            filtered, x="area", y="price", color="bedrooms",
+            title="House Area and Price", opacity=0.7,
+            color_continuous_scale="Blues",
+        )
+        fig.update_layout(height=320, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with r2c2:
+        fig = px.histogram(
+            filtered, x="price", nbins=30, title="Price Distribution",
+            color_discrete_sequence=[NAVY],
+        )
+        fig.update_layout(height=320, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with r2c3:
+        bed_counts = filtered["bedrooms"].value_counts().reset_index()
+        bed_counts.columns = ["bedrooms", "count"]
+        fig = px.pie(
+            bed_counts, names="bedrooms", values="count", hole=0.55,
+            title="Bedrooms Split", color_discrete_sequence=PALETTE,
+        )
+        fig.update_layout(height=320, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ---- Row 3: parking pie + stacked bar (bedrooms x bathrooms) ----
+    r3c1, r3c2 = st.columns(2)
+
+    with r3c1:
+        park_counts = filtered["parking"].value_counts().reset_index()
+        park_counts.columns = ["parking", "count"]
+        fig = px.pie(
+            park_counts, names="parking", values="count",
+            title="Avg Price Mix by Parking Spaces", color_discrete_sequence=PALETTE,
+        )
+        fig.update_layout(height=340, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with r3c2:
+        combo = filtered.groupby(["bedrooms", "bathrooms"], as_index=False)["price"].mean()
+        fig = px.bar(
+            combo, x="bedrooms", y="price", color="bathrooms",
+            title="Avg Price by Bedrooms and Bathrooms",
+            barmode="stack", color_continuous_scale="Blues",
+        )
+        fig.update_layout(height=340, margin=dict(t=40, b=10, l=10, r=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+
+# ------------------------------------------
+# TAB 2: PREDICT
 # ------------------------------------------
 with tab_predict:
     st.header("Enter House Details")
@@ -135,8 +321,6 @@ with tab_predict:
         st.markdown("---")
         st.subheader("How your inputs compare to the dataset")
 
-        # Radar-style comparison: your house's feature values vs dataset averages,
-        # each normalized to 0-1 so wildly different scales (area vs bedrooms) are comparable.
         norm_rows = []
         your_values = {"area": area, "bedrooms": bedrooms, "bathrooms": bathrooms, "parking": parking}
         for feat in FEATURES:
@@ -162,7 +346,6 @@ with tab_predict:
         )
         st.plotly_chart(fig_radar, use_container_width=True)
 
-        # Where does this prediction fall in the overall price distribution?
         fig_price_pos = px.histogram(df, x=TARGET, nbins=40, title="Where your estimate falls in the price distribution")
         fig_price_pos.add_vline(
             x=prediction, line_dash="dash", line_color="red",
@@ -171,35 +354,6 @@ with tab_predict:
         st.plotly_chart(fig_price_pos, use_container_width=True)
     else:
         st.caption("Fill in the details above and click **Predict** to see comparison charts.")
-
-
-# ------------------------------------------
-# TAB 2: EXPLORE DATA
-# ------------------------------------------
-with tab_explore:
-    st.header("Dataset Overview")
-    st.write(f"**{df.shape[0]} rows × {df.shape[1]} columns**")
-    st.dataframe(df.head(10), use_container_width=True)
-
-    st.subheader("Price distribution")
-    fig_hist = px.histogram(df, x=TARGET, nbins=40, marginal="box")
-    st.plotly_chart(fig_hist, use_container_width=True)
-
-    st.subheader("Feature relationships with price")
-    feat_choice = st.selectbox("Choose a feature to plot against price", FEATURES)
-    fig_scatter = px.scatter(
-        df, x=feat_choice, y=TARGET, trendline="ols",
-        opacity=0.6, title=f"{feat_choice} vs {TARGET}",
-    )
-    st.plotly_chart(fig_scatter, use_container_width=True)
-
-    st.subheader("Correlation heatmap")
-    corr = df[FEATURES + [TARGET]].corr()
-    fig_corr = px.imshow(
-        corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
-        title="Correlation between features and price",
-    )
-    st.plotly_chart(fig_corr, use_container_width=True)
 
 
 # ------------------------------------------
