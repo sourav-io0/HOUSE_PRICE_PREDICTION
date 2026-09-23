@@ -32,7 +32,7 @@ charts — all inside a single Streamlit web application.
 ## 🗂️ Dataset
 
 - **File:** `HOUSE_PRICE_PREDICTION.csv`
-**Resource** https://www.kaggle.com/datasets/yasserh/housing-prices-dataset
+- **Resource:** [Housing Prices Dataset (Kaggle)](https://www.kaggle.com/datasets/yasserh/housing-prices-dataset)
 - **Records:** 545 houses
 - **Features used:**
 
