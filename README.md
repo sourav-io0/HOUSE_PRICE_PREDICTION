@@ -129,7 +129,7 @@ A Power-BI-style analytics view of the housing dataset:
 
 4. **Run the Streamlit application**
    ```bash
-   streamlit run app.py
+   streamlit run SouravMahata_HousePricePrediction.py
    ```
 
 5. **Open the app** in your browser at the local URL shown in the terminal
